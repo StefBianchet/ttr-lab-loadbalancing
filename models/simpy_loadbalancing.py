@@ -31,11 +31,19 @@ class LoadBalancer:
     def __init__(self, env, servers):
         self.env = env
         self.servers = servers
-        self.next_server = 0
+        self.next_server = 0 # Uncomment for round-robin policy or shortest queue first
+        # self.central_queue = simpy.Store(env)  # Uncomment for central queue policy
+        
+        # Start server processes to pull from the central queue
+        #for server in servers:
+        #    self.env.process(self.server_worker(server))
 
     def handle_request(self):
         """Choose a server and send the request to it."""
         arrival_time = self.env.now
+        # self.central_queue.put(arrival_time) # Uncomment for central queue
+        
+        # Uncomment for round-robin policy or shortest queue first
         server = self.round_robin() # Use the task assignment policy here
         self.env.process(server.handle_request(arrival_time))
 
@@ -45,6 +53,18 @@ class LoadBalancer:
         server = self.servers[self.next_server]
         self.next_server = (self.next_server + 1) % len(self.servers)
         return server
+    
+    # Central Queue Worker ----------------------------------------------
+    def server_worker(self, server):
+        """Continuously pull requests from the central queue and assign them to servers."""
+        while True:
+            arrival_time = yield self.central_queue.get()
+            self.env.process(server.handle_request(arrival_time))
+
+    # Shortest Queue First ----------------------------------------------
+    def shortest_queue_first(self):
+        """Shortest Queue First: Direct requests to the server with the shortest queue."""
+        return min(self.servers, key=lambda server: len(server.resource.queue))
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +107,7 @@ def main():
     # Simulation coniguration
     plot_file = "../visualizations/1_server.png"
     num_requests = 500_000
-    service_rates = [100] # List of service rates of each server
+    service_rates = [100,100,100,100,100,20] # List of service rates of each server
     arrival_rates = list(range(5, 100, 5)) + [99] # List of arrival rates to simulate
 
     # Lists to store the results of the different simulation runs
